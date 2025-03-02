@@ -8,7 +8,7 @@ use std::str::FromStr;
 /// Decodes the HTML response from a course search into a list of courses.
 /// If you used get_course, the response should be a single course.
 /// If an error occurs, the function will return an error
-pub fn decode_search<'a>(search_response: SearchResponse) -> Result<Vec<Course>, HtmlDecodeError> {
+pub fn decode_search(search_response: SearchResponse) -> Result<Vec<Course>, HtmlDecodeError> {
     let document = scraper::Html::parse_document(&search_response.html);
 
     let mut course_list = Vec::new();
