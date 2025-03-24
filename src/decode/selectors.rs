@@ -8,4 +8,5 @@ lazy_static! {
     pub static ref PARAGRAPH_SELECTOR: Selector = Selector::parse("p").unwrap();
     pub static ref SECTION_SELECTOR: Selector = Selector::parse("tr").unwrap();
     pub static ref ABBREVIATION_SELECTOR: Selector = Selector::parse("abbr").unwrap();
+    pub static ref LINK_SELECTOR: Selector = Selector::parse("a").unwrap();
 }

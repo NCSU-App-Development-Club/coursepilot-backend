@@ -1,4 +1,4 @@
-use coursepilot_backend::run;
+use wolf_catalog_backend::run;
 
 #[tokio::main]
 async fn main() {

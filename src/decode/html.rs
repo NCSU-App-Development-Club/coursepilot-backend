@@ -1,8 +1,8 @@
 use crate::decode::errors::HtmlDecodeError;
-use crate::decode::models::{Availability, Course, Schedule, Section, Status};
+use crate::decode::models::{Availability, Course, Instructor, Schedule, Section, Status};
 use crate::decode::selectors::*;
 use crate::request::search::SearchResponse;
-use chrono::{NaiveTime, Weekday};
+use chrono::{NaiveDate, NaiveTime, Weekday};
 use std::str::FromStr;
 
 /// Decodes the HTML response from a course search into a list of courses.
@@ -83,6 +83,87 @@ fn parse_course(course_html: scraper::ElementRef) -> Option<Course> {
     Some(course)
 }
 
+// Code below for parsing a single section
+
+// todo: test for multiple professors, only tested for one at the moment
+fn parse_instructors(instructor_html: scraper::ElementRef) -> Vec<Instructor> {
+    let mut instructors = Vec::new();
+
+    for link in instructor_html.child_elements() {
+        instructors.push(Instructor {
+            name: link.text().collect::<String>().trim().to_string(),
+            webpage: link.value().attr("href").map(|s| s.to_string()),
+        })
+    }
+
+    instructors
+}
+
+fn parse_availability(availability_html: scraper::ElementRef) -> Option<Availability> {
+    let mut status_children = availability_html.text();
+
+    let status = status_children.next()?;
+
+    let fullness = status_children.next()?;
+    let mut capacity_pair = fullness.split('/');
+
+    let status = Status::try_from(status).ok()?;
+    let capacity = capacity_pair.next()?.parse::<u32>().ok()?;
+    let enrolled = capacity_pair.next()?.parse::<u32>().ok()?;
+
+    // can't test adding waitlisted until there are courses with waitlisted sections
+    // TODO: once enrollment begins, add waitlisted , also just check if the availability works at all
+    let waitlisted = 0_u32;
+
+    Some(Availability {
+        status,
+        capacity,
+        enrolled,
+        waitlisted,
+    })
+}
+
+fn parse_schedule(schedule_html: scraper::ElementRef) -> Option<Schedule> {
+    if schedule_html.text().next() == Some("TBD") {
+        None
+    } else {
+        let times = schedule_html.text().last()?.trim();
+        let time_pair = times.split(" - ").collect::<Vec<&str>>();
+
+        let begin = NaiveTime::parse_from_str(time_pair.first()?.trim(), "%I:%M %p").ok()?;
+        let end = NaiveTime::parse_from_str(time_pair.last()?.trim(), "%I:%M %p").ok()?;
+
+        let days = schedule_html
+            .select(&ABBREVIATION_SELECTOR)
+            .map(|abbr| abbr.value()
+                .attr("title")
+                .unwrap_or(" - meet")  // if the title attribute is missing, force parsing to fail
+                 // this is probably bad practice, but it's the best I can do for now
+            )
+            .filter(|s| s.contains(" - meet"))
+            .map(|s| s.replace(" - meet", ""))
+            .map(|s| Weekday::from_str(&s))
+            .collect::<Result<Vec<_>, _>>();
+
+        Some(Schedule {
+            days: days.ok()?,
+            begin_time: begin,
+            end_time: end,
+        })
+    }
+}
+
+fn parse_begin_end_date(date_html: scraper::ElementRef) -> Option<(NaiveDate, NaiveDate)> {
+    let date_range = date_html.text().collect::<String>();
+    let date_pair = date_range.split(" - ").collect::<Vec<&str>>();
+    
+    let begin = NaiveDate::parse_from_str(date_pair.first()?.trim(), "%m/%d/%y").ok()?;
+    let end = NaiveDate::parse_from_str(date_pair.last()?.trim(), "%m/%d/%y").ok()?;
+    
+    Some((begin, end))
+    
+}
+
 fn parse_section(section_html: scraper::ElementRef) -> Option<Section> {
     let mut children = section_html.child_elements();
 
@@ -100,67 +181,44 @@ fn parse_section(section_html: scraper::ElementRef) -> Option<Section> {
         .parse::<u32>()
         .ok()?;
 
-    let availability = {
-        let mut status_children = children.next()?.text();
+    let availability = parse_availability(children.next()?)?;
 
-        let status = status_children.next()?;
-
-        let fullness = status_children.next()?;
-        let mut capacity_pair = fullness.split('/');
-
-        let status = Status::try_from(status).ok()?;
-        let capacity = capacity_pair.next()?.parse::<u32>().ok()?;
-        let enrolled = capacity_pair.next()?.parse::<u32>().ok()?;
-
-        // can't test adding waitlisted until there are courses with waitlisted sections
-        // TODO: once enrollment begins, add waitlisted parsing
-        let waitlisted = 0_u32;
-
-        Availability {
-            status,
-            capacity,
-            enrolled,
-            waitlisted,
-        }
-    };
-
-    let schedule = {
-        let schedule_children = children.next()?;
-
-        if schedule_children.text().next() == Some("TBD") {
-            None
-        } else {
-            let times = schedule_children.text().last()?.trim();
-            let time_pair = times.split(" - ").collect::<Vec<&str>>();
-
-            let begin = NaiveTime::parse_from_str(time_pair.first()?.trim(), "%I:%M %p").ok()?;
-            let end = NaiveTime::parse_from_str(time_pair.last()?.trim(), "%I:%M %p").ok()?;
-
-            let days = schedule_children
-                .select(&ABBREVIATION_SELECTOR)
-                .map(|abbr| abbr.value()
-                    .attr("title")
-                    .unwrap_or(" - meet")  // if the title attribute is missing, force parsing to fail
-                     // this is probably bad practice, but it's the best I can do for now
-                )
-                .filter(|s| s.contains(" - meet"))
-                .map(|s| s.replace(" - meet", ""))
-                .map(|s| Weekday::from_str(&s))
-                .collect::<Result<Vec<_>, _>>();
-            
-            Some(Schedule {
-                days: days.ok()?,
-                begin_time: begin,
-                end_time: end,
-            })
-        }
-    };
+    let schedule = parse_schedule(children.next()?);
     
     let location = children.next()?.text().collect::<String>();
     
-    // TODO: add instructor parsing (w/ support for multiple instructors)
-    // TODO: add begin and end date parsing
-    // TODO: add notes parsing (class notes, class requisites, and class restrictions)
+    let instructors = parse_instructors(children.next()?);
+    
+    let (begin_date, end_date) = parse_begin_end_date(children.next()?)?;
+    
+    // skip an empty element
+    children.next()?;
+    
+    let misc = children.next()?.select(&LINK_SELECTOR);
+    
+    let mut notes = None;
+    let mut requisites = None;
+    let mut restrictions = None;
+    
+    // note: content may contain raw html
+    for link in misc {
+        let id = link.value().attr("id");
+        let content = link.value().attr("data-content");
+        
+        if id.is_none() || content.is_none() {
+            continue;
+        }
+        
+        let content = content.unwrap().trim().to_string();
+        
+        if id.unwrap().starts_with("notes") {
+            notes = Some(content);
+        } else if id.unwrap().starts_with("reqs") {
+            requisites = Some(content);
+        } else if id.unwrap().starts_with("reserve") {
+            restrictions = Some(content);
+        }
+    }
 
     Some(Section {
         number: section_number,
@@ -169,11 +227,11 @@ fn parse_section(section_html: scraper::ElementRef) -> Option<Section> {
         availability,
         schedule,
         location,
-        instructors: todo!(),
-        begin_date: todo!(),
-        end_date: todo!(),
-        notes: todo!(),
-        requisites: todo!(),
-        restrictions: todo!(),
+        instructors,
+        begin_date,
+        end_date,
+        notes,
+        requisites,
+        restrictions,
     })
 }

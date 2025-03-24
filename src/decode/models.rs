@@ -20,12 +20,18 @@ pub struct Section {
     // schedule is TBD if null
     pub schedule: Option<Schedule>,
     pub location: String,
-    pub instructors: Vec<String>,
+    pub instructors: Vec<Instructor>,
     pub begin_date: NaiveDate,
     pub end_date: NaiveDate,
     pub notes: Option<String>,
     pub requisites: Option<String>,
     pub restrictions: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Instructor {
+    pub name: String,
+    pub webpage: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

@@ -21,11 +21,13 @@ mod decode {
 
 pub async fn run() -> Result<(), Box<dyn Error>> {
     let subject = "CSC";
-    let course_number = 226;
+    let course_number = 297;
     
     let resp = search::get_course(subject, course_number, SPRING_TERM).await?;
     
-    println!("{:?}", decode_search(resp));
+    let courses = decode_search(resp)?;
+    
+    println!("{}", serde_json::to_string_pretty(&courses)?);
     
     Ok(())
 }
