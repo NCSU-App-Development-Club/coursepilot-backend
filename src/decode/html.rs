@@ -4,6 +4,8 @@ use crate::decode::selectors::*;
 use crate::request::search::SearchResponse;
 use chrono::{NaiveDate, NaiveTime, Weekday};
 use std::str::FromStr;
+use lazy_static::lazy_static;
+use regex::Regex;
 
 /// Decodes the HTML response from a course search into a list of courses.
 /// If you used get_course, the response should be a single course.
@@ -105,16 +107,22 @@ fn parse_availability(availability_html: scraper::ElementRef) -> Option<Availabi
     let status = status_children.next()?;
 
     let fullness = status_children.next()?;
-    let mut capacity_pair = fullness.split('/');
-
     let status = Status::try_from(status).ok()?;
-    let capacity = capacity_pair.next()?.parse::<u32>().ok()?;
-    let enrolled = capacity_pair.next()?.parse::<u32>().ok()?;
 
-    // can't test adding waitlisted until there are courses with waitlisted sections
-    // TODO: once enrollment begins, add waitlisted , also just check if the availability works at all
-    let waitlisted = 0_u32;
+    // regex that matches both "enrolled/capacity" and "enrolled/capacity (waitlisted)"
+    lazy_static! {
+        static ref re: Regex = Regex::new(r"(\d+)/(\d+)(?:\s*\((\d+)\))?").unwrap();
+    }
 
+    let caps = re.captures(fullness)?;
+
+    let enrolled = caps.get(1)?.as_str().parse::<u32>().ok()?;
+    let capacity = caps.get(2)?.as_str().parse::<u32>().ok()?;
+
+    let waitlisted = caps.get(3)
+        .and_then(|m| m.as_str().parse::<u32>().ok())
+        .unwrap_or(0);
+    
     Some(Availability {
         status,
         capacity,

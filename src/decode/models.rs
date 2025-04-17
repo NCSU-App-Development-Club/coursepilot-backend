@@ -64,7 +64,7 @@ impl TryFrom<&str> for Status {
         match value {
             "Open" => Ok(Status::Open),
             "Closed" => Ok(Status::Closed),
-            "Waitlisted" => Ok(Status::Waitlisted),
+            "Waitlist" => Ok(Status::Waitlisted),
             "Reserved" => Ok(Status::Reserved),
             _ => Err("Invalid status")
         }
