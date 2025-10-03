@@ -15,8 +15,8 @@ BeautifulSoup (for scraping websites).
 5. Install dependencies: `pip install -r requirements.txt`
 6. Run the application: `fastapi dev -e src.main:app --reload` It'll reload on code changes.
 
-Please work in your own branch and open a PR when you're ready for review. Pushes to the main branch
-will automatically deploy a live container to Cloudflare Workers. Access it at https://coursepilot-live.pages.dev.
+Please work in your own branch and open a PR when you're ready for review. Eventually, the main
+branch will automatically deploy a container to some cloud service.
 
 View the legacy Rust implementation [here](https://github.com/IAmThe2ndHuman/coursepilot-backend-legacy).
 
