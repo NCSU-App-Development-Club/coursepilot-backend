@@ -1,15 +1,18 @@
 import aiohttp
 from fastapi import FastAPI, HTTPException
 
-from src.course_parser import MockCourseParser
-from src.prof_parser import MockProfParser
+from src.course_parser import CourseParser
+from src.prof_parser import ProfParser
 
 app = FastAPI()
 http_client = aiohttp.ClientSession()
 
-course_parser = MockCourseParser()
-prof_parser = MockProfParser()
+course_parser = CourseParser(http_client)
+prof_parser = ProfParser(http_client)
 
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the Course API"}
 
 @app.get("/courses")
 async def get_course_prefixes():

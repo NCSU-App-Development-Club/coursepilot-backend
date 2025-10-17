@@ -5,6 +5,8 @@ from aiohttp import ClientSession
 from src.models import ProfessorDetail
 
 
+
+
 class ProfParser:
     def __init__(self, client: ClientSession):
         self._client = client

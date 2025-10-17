@@ -2,11 +2,15 @@ from datetime import datetime
 from typing import Optional
 
 from aiohttp import ClientSession
+from bs4 import BeautifulSoup
+import json
 
 from src.models import CoursePrefixListing, CourseListing, CourseDetail, Semester, SectionDetail, Availability, Schedule
 
 
 class CourseParser:
+    current_term = "2261"
+
     def __init__(self, client: ClientSession):
         self._client = client
         """Use this client to make HTTP requests to the course catalog system."""
@@ -18,7 +22,81 @@ class CourseParser:
         pass
 
     async def get_course_info(self, prefix: str, number: str) -> Optional[CourseDetail]:
-        pass
+        # Replace this URL with the real API endpoint for fetching course info
+        url = "https://webappprd.acs.ncsu.edu/php/coursecat/search.php"
+        print(f"Fetching course info for {prefix} {number} from {url}")
+        try:
+            headers = {
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest",
+                "Referer": "https://webappprd.acs.ncsu.edu/php/coursecat/index.php",
+            }
+            # The API expects form data, not JSON
+            data = {
+                "term": "2261",
+                "subject": prefix,
+                "course-inequality": "=",
+                "course-number": number,
+                "course-career": "",
+                "session": "",
+                "start-time-inequality": "<=",
+                "start-time": "",
+                "end-time-inequality": "<=",
+                "end-time": "",
+                "instructor-name": "",
+                "current_strm": "2261",
+            }
+
+            async with self._client.post(url, data=data, headers=headers) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.content.read()
+        except Exception as e:
+            print(e)
+            return None
+        
+        # Normalize fields from the response to the CourseDetail model
+        html = json.loads(data.decode("utf-8"))["html"]
+
+        soup = BeautifulSoup(html, "html.parser")
+        print(soup.prettify())
+        course_section = soup.find("section", class_="course")
+        course_header = course_section.find("h1")
+        name = course_header.find("small").text.strip()
+        units = course_header.find("span", class_="units").text.split(":")[1].strip()
+
+        description = course_section.find_all("p")[0].text.strip()
+
+                # Parse table of sections
+        # sections = []
+        # table = course_section.find("table")
+        # for row in table.find_all("tr")[1:]:  # skip header row
+        #     cells = row.find_all("td")
+        #     if not cells:
+        #         continue
+        #     section_data = {
+        #         "section": cells[0].get_text(strip=True),
+        #         "component": cells[1].get_text(strip=True),
+        #         "class_number": cells[2].get_text(strip=True),
+        #         "availability": cells[3].get_text(strip=True),
+        #         "days_times": cells[4].get_text(" ", strip=True),
+        #         "location": cells[5].get_text(" ", strip=True),
+        #         "instructor": cells[6].get_text(" ", strip=True),
+        #         "dates": cells[7].get_text(strip=True)
+        #     }
+        #     sections.append(section_data)
+        
+        semesters = ["fall2026"]  # Placeholder, replace with actual semester extraction logic
+
+        return CourseDetail(
+            prefix=prefix,
+            number=number,
+            name=name,
+            description=description,
+            units=units,
+            semesters=semesters,
+        )
 
     async def get_course_sections(
         self, prefix: str, number: str, semester: str
