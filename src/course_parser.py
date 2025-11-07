@@ -1,5 +1,6 @@
 from datetime import datetime
-from typing import Optional
+import re
+from typing import Optional, List
 
 from aiohttp import ClientSession
 from bs4 import BeautifulSoup
@@ -22,9 +23,17 @@ class CourseParser:
         pass
 
     async def get_course_info(self, prefix: str, number: str) -> Optional[CourseDetail]:
-        # Replace this URL with the real API endpoint for fetching course info
+        pass
+
+    async def get_course_sections(
+        self, prefix: str, number: str, semester: str
+    ) -> Optional[List[SectionDetail]]:
+        """
+        Fetches all section details for a given course.
+        """
         url = "https://webappprd.acs.ncsu.edu/php/coursecat/search.php"
         print(f"Fetching course info for {prefix} {number} from {url}")
+
         try:
             headers = {
                 "Accept": "application/json, text/javascript, */*; q=0.01",
@@ -32,9 +41,8 @@ class CourseParser:
                 "X-Requested-With": "XMLHttpRequest",
                 "Referer": "https://webappprd.acs.ncsu.edu/php/coursecat/index.php",
             }
-            # The API expects form data, not JSON
             data = {
-                "term": "2261",
+                "term": semester,
                 "subject": prefix,
                 "course-inequality": "=",
                 "course-number": number,
@@ -45,63 +53,117 @@ class CourseParser:
                 "end-time-inequality": "<=",
                 "end-time": "",
                 "instructor-name": "",
-                "current_strm": "2261",
+                "current_strm": semester,
             }
 
             async with self._client.post(url, data=data, headers=headers) as resp:
                 if resp.status != 200:
                     return None
-                data = await resp.content.read()
+                response_data = await resp.content.read()
+
         except Exception as e:
             print(e)
             return None
-        
-        # Normalize fields from the response to the CourseDetail model
-        html = json.loads(data.decode("utf-8"))["html"]
 
+        # Parse HTML content
+        html = json.loads(response_data.decode("utf-8"))["html"]
         soup = BeautifulSoup(html, "html.parser")
-        print(soup.prettify())
         course_section = soup.find("section", class_="course")
-        course_header = course_section.find("h1")
-        name = course_header.find("small").text.strip()
-        units = course_header.find("span", class_="units").text.split(":")[1].strip()
+        table = course_section.find("table", class_="section-table")
 
-        description = course_section.find_all("p")[0].text.strip()
+        sections: List[SectionDetail] = []
 
-                # Parse table of sections
-        # sections = []
-        # table = course_section.find("table")
-        # for row in table.find_all("tr")[1:]:  # skip header row
-        #     cells = row.find_all("td")
-        #     if not cells:
-        #         continue
-        #     section_data = {
-        #         "section": cells[0].get_text(strip=True),
-        #         "component": cells[1].get_text(strip=True),
-        #         "class_number": cells[2].get_text(strip=True),
-        #         "availability": cells[3].get_text(strip=True),
-        #         "days_times": cells[4].get_text(" ", strip=True),
-        #         "location": cells[5].get_text(" ", strip=True),
-        #         "instructor": cells[6].get_text(" ", strip=True),
-        #         "dates": cells[7].get_text(strip=True)
-        #     }
-        #     sections.append(section_data)
-        
-        semesters = ["fall2026"]  # Placeholder, replace with actual semester extraction logic
+        for row in table.find_all("tr"):
+            cells = row.find_all("td")
+            if len(cells) < 8:
+                continue  # skip header/footer rows
 
-        return CourseDetail(
-            prefix=prefix,
-            number=number,
-            name=name,
-            description=description,
-            units=units,
-            semesters=semesters,
-        )
+            # --- Parse Availability ---
+            avail_html = cells[3]
+            status = avail_html.find("span").get_text(strip=True)
+            seat_text = avail_html.get_text(strip=True)
+            seat_match = re.search(r"(\d+)\s*/\s*(\d+)", seat_text)
+            open_seats = int(seat_match.group(1)) if seat_match else 0
+            max_seats = int(seat_match.group(2)) if seat_match else 0
 
-    async def get_course_sections(
-        self, prefix: str, number: str, semester: str
-    ) -> Optional[list[SectionDetail]]:
-        pass
+            availability = Availability(
+                status=status,
+                openSeats=open_seats,
+                maxSeats=max_seats,
+                waitlisted=0  # Not shown in HTML
+            )
+
+            # --- Parse Schedule ---
+            # Example format (for four sections):
+            # S M meets M T W meets W T F S 8:30 AM  - 9:45 AM
+            # S M meets M T W meets W T F S 11:45 AM  - 1:00 PM
+            # S M T meets T W T meets Th F S 11:45 AM  - 1:00 PM
+            # TBD
+            day_time = cells[4].get_text(" ", strip=True)
+            time_match = re.search(r"(\d{1,2}:\d{2}\s*[AP]M)\s*-\s*(\d{1,2}:\d{2}\s*[AP]M)", day_time)
+            start_time = time_match.group(1) if time_match else None
+            end_time = time_match.group(2) if time_match else None
+
+            days = []
+
+            if day_time == "TBD":
+                days = ["TBD"]
+                start_time = None
+                end_time = None
+            else:
+
+                day_time_parts = day_time.split(" ")
+
+                for i, token in enumerate(day_time_parts):
+                    if token == "meets":
+                        days.append(day_time_parts[i + 1])
+
+            schedule = Schedule(
+                days=days,
+                from_time=start_time,
+                to_time=end_time,
+            )
+
+            # --- Parse instructors ---
+            instructor_links = cells[6].find_all("a")
+            instructors = [link.get_text(strip=True) for link in instructor_links if link]
+
+            # --- Parse date range ---
+            date_text = cells[7].get_text(strip=True)
+            date_match = re.findall(r"\d{2}/\d{2}/\d{2}", date_text)
+            begin_date = datetime.strptime(date_match[0], "%m/%d/%y") if len(date_match) >= 1 else None
+            end_date = datetime.strptime(date_match[1], "%m/%d/%y") if len(date_match) >= 2 else None
+
+            component = cells[1].get_text(strip=True)
+            number=cells[0].get_text(strip=True)
+
+            section = SectionDetail(
+                course_prefix=prefix,
+                course_number=number,
+                number=number,
+                component=component,
+                availability=availability,
+                recitations=[],
+                schedule=schedule,
+                location=cells[5].get_text(" ", strip=True),
+                instructors=instructors,
+                begin=begin_date,
+                end=end_date,
+                restrictions=[],  # Could parse popover later if needed
+            )
+
+            # --- Build SectionDetail ---
+            if component in ["Rec", "Pro"]:
+                for supersection in sections:
+                    if supersection.component == "LEC" and supersection.number == number[:-1]:
+                        if supersection.recitations is None:
+                            supersection.recitations = []
+                        supersection.recitations.append(section)
+                        break
+            else:
+                sections.append(section)
+
+        return sections
 
     async def get_semesters(self) -> list[Semester]:
         pass

@@ -28,8 +28,8 @@ class Availability(BaseModel):
 
 class Schedule(BaseModel):
     days: list[str]
-    from_time: str
-    to_time: str
+    from_time: str | None = None
+    to_time: str | None = None
 
 class SectionDetail(BaseModel):
     course_prefix: str
@@ -37,6 +37,7 @@ class SectionDetail(BaseModel):
     number: str
     component: str
     availability: Availability
+    recitations: list["SectionDetail"] | None = None
     schedule: Schedule
     location: str
     instructors: list[str]
