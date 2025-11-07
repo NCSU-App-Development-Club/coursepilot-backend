@@ -152,14 +152,23 @@ class CourseParser:
                 restrictions=[],  # Could parse popover later if needed
             )
 
+            print(f"Parsed section: {number}")
+
+            print(f"section:", section)
+
             # --- Build SectionDetail ---
-            if component in ["Rec", "Pro"]:
+            if component in ["Rec", "Pro", "Lab"]:
+                print("Found recitation/lab")
+                foundRoot = False
                 for supersection in sections:
-                    if supersection.component == "LEC" and supersection.number == number[:-1]:
+                    if supersection.component == "Lec" and supersection.number == number[:-1]:
                         if supersection.recitations is None:
                             supersection.recitations = []
                         supersection.recitations.append(section)
+                        foundRoot = True
                         break
+                if not foundRoot:
+                    sections.append(section)
             else:
                 sections.append(section)
 
