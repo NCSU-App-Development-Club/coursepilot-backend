@@ -1,0 +1,20 @@
+steps:
+# Build the image
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'us-east1-docker.pkg.dev/coursepilot-476022/github.com/ncsu-app-development-club/coursepilot-backend:$COMMIT_SHA', '.']
+# Push the image to Artifact Registry
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'us-east1-docker.pkg.dev/coursepilot-476022/github.com/ncsu-app-development-club/coursepilot-backend:$COMMIT_SHA']
+# Deploy image to Cloud Run
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: gcloud
+  args: 
+    - 'run'
+    - 'deploy'
+    - 'coursepilot-backend'
+    - '--image'
+    - 'us-east1-docker.pkg.dev/coursepilot-476022/github.com/ncsu-app-development-club/coursepilot-backend:$COMMIT_SHA'
+    - '--region'
+    - 'us-east1'
+images:
+- 'us-east1-docker.pkg.dev/coursepilot-476022/github.com/ncsu-app-development-club/coursepilot-backend:$COMMIT_SHA'
