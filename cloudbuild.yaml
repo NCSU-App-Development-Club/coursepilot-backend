@@ -19,3 +19,5 @@ steps:
     - 'us-east1'
 images:
 - 'us-east1-docker.pkg.dev/coursepilot-476022/github.com/ncsu-app-development-club/coursepilot-backend:$COMMIT_SHA'
+options:
+  logging: CLOUD_LOGGING_ONLY
