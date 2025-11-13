@@ -82,15 +82,20 @@ class CourseParser:
             avail_html = cells[3]
             status = avail_html.find("span").get_text(strip=True)
             seat_text = avail_html.get_text(strip=True)
+            print(seat_text)
+            # Waitlist0/40 (36)
             seat_match = re.search(r"(\d+)\s*/\s*(\d+)", seat_text)
+            print(seat_match)
             open_seats = int(seat_match.group(1)) if seat_match else 0
             max_seats = int(seat_match.group(2)) if seat_match else 0
+            waitlisted_match = re.search(r"\((\d+)\)", seat_text)
+            waitlisted_seats = int(waitlisted_match.group(1)) if waitlisted_match else 0
 
             availability = Availability(
                 status=status,
                 openSeats=open_seats,
                 maxSeats=max_seats,
-                waitlisted=0  # Not shown in HTML
+                waitlisted=waitlisted_seats
             )
 
             # --- Parse Schedule ---
@@ -111,9 +116,7 @@ class CourseParser:
                 start_time = None
                 end_time = None
             else:
-
                 day_time_parts = day_time.split(" ")
-
                 for i, token in enumerate(day_time_parts):
                     if token == "meets":
                         days.append(day_time_parts[i + 1])
@@ -135,12 +138,12 @@ class CourseParser:
             end_date = datetime.strptime(date_match[1], "%m/%d/%y") if len(date_match) >= 2 else None
 
             component = cells[1].get_text(strip=True)
-            number=cells[0].get_text(strip=True)
+            section_number=cells[0].get_text(strip=True)
 
             section = SectionDetail(
                 course_prefix=prefix,
                 course_number=number,
-                number=number,
+                number=section_number,
                 component=component,
                 availability=availability,
                 recitations=[],
@@ -152,16 +155,12 @@ class CourseParser:
                 restrictions=[],  # Could parse popover later if needed
             )
 
-            print(f"Parsed section: {number}")
-
-            print(f"section:", section)
-
             # --- Build SectionDetail ---
             if component in ["Rec", "Pro", "Lab"]:
                 print("Found recitation/lab")
                 foundRoot = False
                 for supersection in sections:
-                    if supersection.component == "Lec" and supersection.number == number[:-1]:
+                    if supersection.component == "Lec" and supersection.number == section_number[:-1]:
                         if supersection.recitations is None:
                             supersection.recitations = []
                         supersection.recitations.append(section)
