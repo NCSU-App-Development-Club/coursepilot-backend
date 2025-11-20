@@ -23,7 +23,24 @@ class CourseParser:
         pass
 
     async def get_course_info(self, prefix: str, number: str) -> Optional[CourseDetail]:
-        pass
+        url = "https://webappprd.acs.ncsu.edu/php/coursecat/directory_search.php"
+
+        data = {
+            "search_val": prefix,
+            "type": "subject",
+            "career": ""
+        }
+
+        async with self._client.post(url, data=data) as response:
+            if response.status != 200:
+                    return None
+            response_data = await response.content.read()
+        
+        courses = json.loads(response_data.decode("utf-8"))["courses"]
+
+
+        return None
+        
 
     async def get_course_sections(
         self, prefix: str, number: str, semester: str
