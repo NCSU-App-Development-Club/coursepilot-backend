@@ -22,14 +22,14 @@ class CourseDetail(BaseModel):
 
 class Availability(BaseModel):
     status: str
-    openSeats: int
-    maxSeats: int
+    open_seats: int
+    max_seats: int
     waitlisted: int
 
 class Schedule(BaseModel):
     days: list[str]
-    from_time: str
-    to_time: str
+    begin_time: str
+    end_time: str
 
 class SectionDetail(BaseModel):
     course_prefix: str
